@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Календарь Смен</title>
+    <style>
+        :root {
+            --black: #0a0a0a;
+            --black-2: #161616;
+            --black-3: #1e1e1e;
+            --gold: #d4af37;
+            --gold-soft: #f0d879;
+            --red: #b3122c;
+            --red-soft: #e63950;
+            --text-dim: #8a8a8a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--black);
+            color: #fff;
+            margin: 0;
+            padding: 16px;
+            padding-top: max(16px, env(safe-area-inset-top, 0px));
+            padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+        }
+
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        h2 { margin: 0; color: var(--gold); font-size: 20px; letter-spacing: 0.3px; }
+        button.nav-btn {
+            background: var(--black-3);
+            color: var(--gold);
+            border: 1px solid #2c2c2c;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        button.nav-btn:active { background: #262626; }
+
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+        .day-name { font-weight: bold; color: var(--text-dim); font-size: 12px; padding-bottom: 5px; }
+        .day {
+            background: var(--black-3);
+            border-radius: 8px;
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            cursor: pointer;
+            position: relative;
+            border: 1px solid transparent;
+        }
+        .day.empty { background: transparent; cursor: default; }
+        .day.today { border: 1px solid #fff; }
+
+        /* Цвета смен: красный / чёрный / золотой */
+        .day.day-shift { background: var(--red); color: #fff; font-weight: bold; border-color: var(--red-soft); }
+        .day.night-shift { background: #000; color: var(--gold); font-weight: bold; border-color: var(--gold); }
+
+        /* Золотая рамка: 15 число и последний день месяца */
+        .day.key-date {
+            box-shadow: 0 0 0 2px var(--gold);
+        }
+        .day.key-date::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--gold);
+        }
+
+        .badge { font-size: 10px; margin-top: 2px; }
+
+        .stats {
+            background: var(--black-3);
+            border: 1px solid #262626;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-around;
+            font-size: 14px;
+        }
+        .stat-item { text-align: center; }
+        .stat-item span { font-weight: bold; font-size: 18px; display: block; }
+
+        .salary-box {
+            margin-top: 10px;
+            background: linear-gradient(135deg, #1c1207, #120b04);
+            border: 1px solid var(--gold);
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+        }
+        .salary-label { font-size: 12px; color: var(--gold-soft); letter-spacing: 0.4px; }
+        .salary-value { font-size: 26px; font-weight: bold; color: var(--gold); margin-top: 4px; }
+        .salary-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+        /* Прогресс-бар: красный до 7 смен, дальше золотой */
+        .progress-wrap { margin-top: 15px; }
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+        .progress-track {
+            position: relative;
+            height: 14px;
+            background: var(--black-3);
+            border: 1px solid #262626;
+            border-radius: 7px;
+            overflow: hidden;
+        }
+        .progress-fill-red {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            background: linear-gradient(90deg, var(--red), var(--red-soft));
+            border-radius: 7px 0 0 7px;
+            transition: width 0.3s ease;
+        }
+        .progress-fill-gold {
+            position: absolute;
+            top: 0; bottom: 0;
+            background: linear-gradient(90deg, var(--gold), var(--gold-soft));
+            transition: width 0.3s ease, left 0.3s ease;
+        }
+        .progress-marker {
+            position: absolute;
+            top: -3px;
+            bottom: -3px;
+            width: 1px;
+            background: rgba(255,255,255,0.3);
+        }
+
+        .clear-all-btn {
+            width: 100%;
+            margin-top: 15px;
+            padding: 12px;
+            background: transparent;
+            color: var(--red-soft);
+            border: 1px solid var(--red);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .clear-all-btn:active { background: rgba(179,18,44,0.15); }
+
+        /* Модальное окно выбора */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); justify-content: center; align-items: center; z-index: 10; }
+        .modal-content { background: var(--black-3); border: 1px solid #2c2c2c; padding: 20px; border-radius: 12px; width: 80%; max-width: 300px; text-align: center; }
+        .modal-content h3 { color: var(--gold); }
+        .modal-btn { width: 100%; padding: 12px; margin: 6px 0; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-day { background: var(--red); color: #fff; }
+        .btn-night { background: #000; color: var(--gold); border: 1px solid var(--gold); }
+        .btn-clear { background: #2a2a2a; color: #fff; }
+        .btn-cancel { background: transparent; color: var(--text-dim); border: 1px solid #444; }
+
+        /* Подтверждение очистки всего */
+        .confirm-content { background: var(--black-3); border: 1px solid var(--red); padding: 20px; border-radius: 12px; width: 80%; max-width: 300px; text-align: center; }
+        .confirm-content p { color: #ccc; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <button class="nav-btn" onclick="changeMonth(-1)">❮</button>
+        <h2 id="monthTitle"></h2>
+        <button class="nav-btn" onclick="changeMonth(1)">❯</button>
+    </div>
+
+    <div class="grid">
+        <div class="day-name">Пн</div><div class="day-name">Вт</div><div class="day-name">Ср</div>
+        <div class="day-name">Чт</div><div class="day-name">Пт</div><div class="day-name">Сб</div><div class="day-name">Вс</div>
+    </div>
+
+    <div class="grid" id="calendarGrid"></div>
+
+    <div class="stats">
+        <div class="stat-item" style="color: var(--red-soft);">Дневных:<span id="dayCount">0</span></div>
+        <div class="stat-item" style="color: var(--gold);">Ночных:<span id="nightCount">0</span></div>
+        <div class="stat-item" style="color: #fff;">Всего:<span id="totalCount">0</span></div>
+    </div>
+
+    <div class="salary-box">
+        <div class="salary-label">Зарплата за месяц</div>
+        <div class="salary-value" id="salaryValue">0 ₸</div>
+        <div class="salary-sub" id="salarySub">0 смен × 7 000 ₸</div>
+    </div>
+
+    <div class="progress-wrap">
+        <div class="progress-label">
+            <span>Прогресс смен</span>
+            <span id="progressText">0 / 7</span>
+        </div>
+        <div class="progress-track" id="progressTrack">
+            <div class="progress-fill-red" id="progressFillRed" style="width:0%"></div>
+            <div class="progress-fill-gold" id="progressFillGold" style="width:0%; left:0%; display:none;"></div>
+            <div class="progress-marker" id="progressMarker" style="left:100%; display:none;"></div>
+        </div>
+    </div>
+
+    <button class="clear-all-btn" onclick="openClearAllConfirm()">Очистить все смены</button>
+
+    <!-- Меню выбора -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h3 id="modalDate" style="margin-top:0;">Выбери смену</h3>
+            <button class="modal-btn btn-day" onclick="setShift('day')">Дневная смена</button>
+            <button class="modal-btn btn-night" onclick="setShift('night')">Ночная смена</button>
+            <button class="modal-btn btn-clear" onclick="setShift(null)">Очистить день</button>
+            <button class="modal-btn btn-cancel" onclick="closeModal()">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Подтверждение очистки всего -->
+    <div class="modal" id="clearAllModal">
+        <div class="confirm-content">
+            <h3 style="margin-top:0; color: var(--red-soft);">Очистить все смены?</h3>
+            <p>Это удалит все отмеченные смены за все месяцы. Действие необратимо.</p>
+            <button class="modal-btn btn-day" onclick="confirmClearAll()">Да, очистить всё</button>
+            <button class="modal-btn btn-cancel" onclick="closeClearAllConfirm()">Отмена</button>
+        </div>
+    </div>
+
+    <script>
+        let currentDate = new Date();
+        let selectedDateKey = null;
+        const RATE = 7000; // тенге за смену
+        const TARGET_SHIFTS = 7; // порог, после которого прогресс-бар становится золотым
+
+        let shifts = {};
+        try {
+            shifts = JSON.parse(localStorage.getItem('calendar_shifts')) || {};
+        } catch (e) {
+            shifts = {};
+        }
+
+        const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+
+        function saveShifts() {
+            try {
+                localStorage.setItem('calendar_shifts', JSON.stringify(shifts));
+            } catch (e) {
+                console.error('Storage error', e);
+            }
+        }
+
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            document.getElementById('monthTitle').innerText = `${monthNames[month]} ${year}`;
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const lastDayNum = lastDay.getDate();
+
+            let startingDay = firstDay.getDay() - 1;
+            if (startingDay === -1) startingDay = 6; // Воскресенье
+
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+
+            let dayCount = 0, nightCount = 0;
+
+            for (let i = 0; i < startingDay; i++) {
+                grid.innerHTML += `<div class="day empty"></div>`;
+            }
+
+            const today = new Date();
+
+            for (let d = 1; d <= lastDayNum; d++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const shiftType = shifts[dateKey];
+
+                let shiftClass = '';
+                let badge = '';
+                if (shiftType === 'day') {
+                    shiftClass = 'day-shift';
+                    badge = '<span class="badge">День</span>';
+                    dayCount++;
+                } else if (shiftType === 'night') {
+                    shiftClass = 'night-shift';
+                    badge = '<span class="badge">Ночь</span>';
+                    nightCount++;
+                }
+
+                const isToday = (today.getFullYear() === year && today.getMonth() === month && today.getDate() === d) ? 'today' : '';
+                const isKeyDate = (d === 15 || d === lastDayNum) ? 'key-date' : '';
+
+                grid.innerHTML += `
+                    <div class="day ${shiftClass} ${isToday} ${isKeyDate}" onclick="openModal('${dateKey}', ${d})">
+                        ${d}
+                        ${badge}
+                    </div>
+                `;
+            }
+
+            document.getElementById('dayCount').innerText = dayCount;
+            document.getElementById('nightCount').innerText = nightCount;
+            const total = dayCount + nightCount;
+            document.getElementById('totalCount').innerText = total;
+
+            const salary = total * RATE;
+            document.getElementById('salaryValue').innerText = salary.toLocaleString('ru-RU') + ' ₸';
+            document.getElementById('salarySub').innerText = `${total} смен × 7 000 ₸`;
+
+            updateProgress(total);
+        }
+
+        function updateProgress(total) {
+            const redFill = document.getElementById('progressFillRed');
+            const goldFill = document.getElementById('progressFillGold');
+            const marker = document.getElementById('progressMarker');
+            const progressText = document.getElementById('progressText');
+
+            progressText.innerText = `${total} / ${TARGET_SHIFTS}`;
+
+            if (total <= TARGET_SHIFTS) {
+                const pct = (total / TARGET_SHIFTS) * 100;
+                redFill.style.width = pct + '%';
+                goldFill.style.display = 'none';
+                marker.style.display = 'none';
+            } else {
+                redFill.style.width = '100%';
+                marker.style.display = 'block';
+                marker.style.left = '100%';
+                goldFill.style.display = 'block';
+
+                // Золотая часть заполняется по циклам сверх цели (следующие 7 смен = 100% золота)
+                const extra = total - TARGET_SHIFTS;
+                const cycle = TARGET_SHIFTS;
+                const goldPct = Math.min(100, ((extra % cycle === 0 && extra > 0) ? cycle : extra % cycle) / cycle * 100);
+                goldFill.style.left = '0%';
+                goldFill.style.width = goldPct + '%';
+            }
+        }
+
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            renderCalendar();
+        }
+
+        function openModal(dateKey, dayNumber) {
+            selectedDateKey = dateKey;
+            document.getElementById('modalDate').innerText = `${dayNumber} ${monthNames[currentDate.getMonth()]}`;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function setShift(type) {
+            if (type) {
+                shifts[selectedDateKey] = type;
+            } else {
+                delete shifts[selectedDateKey];
+            }
+            saveShifts();
+            closeModal();
+            renderCalendar();
+        }
+
+        function openClearAllConfirm() {
+            document.getElementById('clearAllModal').style.display = 'flex';
+        }
+
+        function closeClearAllConfirm() {
+            document.getElementById('clearAllModal').style.display = 'none';
+        }
+
+        function confirmClearAll() {
+            shifts = {};
+            saveShifts();
+            closeClearAllConfirm();
+            renderCalendar();
+        }
+
+        renderCalendar();
+    </script>
+</body>
+</html>
